@@ -30,6 +30,8 @@ npx eas-cli@latest build --platform android --profile preview
 
 The last command builds an installable APK in Expo's cloud and prints a link. Open it on the phone and tap Install. Builds count against the neutcrafts account's monthly Expo plan. The `production` profile makes the Play Store bundle.
 
+**Game changes without a new APK:** the app has Expo Updates. After changing the game, run `npm run update` in `mobile/`. Installed preview apps download it on their next launch and use it from the launch after that. A new build is needed only when native settings change (`app.json`, new native packages) or the app version changes.
+
 Phone-only behaviour: the Android back button closes the open panel (then exits), and vibration goes through the native side. Ads and purchases are still test screens.
 
 ## Run it locally
