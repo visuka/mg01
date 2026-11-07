@@ -230,6 +230,13 @@ Higher cases use real city layouts instead of a neat grid:
 | **Ring Road** (23–29) | A hub, an inner ring and an outer ring joined by spokes; exits are highway ramps off the outer ring | Robbers can circle around |
 | **Riverside** (30–35) | A river splits the city; only 2–3 bridges | Bridges are natural choke points |
 
+**Sized for phones (2026-11-07):** a phone screen limits these maps by height, not width.
+- Riverside is 5 streets across and 7 down (it was 8 down).
+- Ring Road is drawn 14% smaller, with the same streets and the same puzzles.
+- Old Town stays 5 × 7.
+- Every exit is a slim green tab next to its last corner: upright on the left and right, flat at the top and bottom.
+- Together that makes Chief maps about 12% bigger on screen; the smallest went from 54 to 63 pixels per street on a 360-pixel-wide phone.
+
 **How it's built:**
 - Maps become networks of intersections at any position, not grid squares.
 - Roads can be straight or angled, and buildings, parks and the river fill the spaces between them.

@@ -71,8 +71,30 @@ function hops(nodes, edges, from) {
   return { d, adj };
 }
 
+// Layout sizes, kept short enough to fill a phone screen.
+// Riverside has 7 rows instead of 8. Ring Road is laid out at full size, then squeezed (see below).
+const SIZE = { oldTown: { W: 5, H: 7 }, riverside: { W: 5, H: 7 } };
+const RING_SQUEEZE = 0.86;
+
+// Shrinks a Ring Road toward the top-left by k. Ramps keep their length and direction, so only
+// the drawing gets bigger on screen: the street network, and so the puzzle, is unchanged.
+function squeezeRing(lv, ringNodes, k) {
+  const ramp = new Map();
+  lv.exits.forEach(([n, dx, dy]) => { if (n >= ringNodes) ramp.set(n, [dx, dy]); });
+  const gateOf = new Map();
+  for (const [a, b] of lv.edges) { if (ramp.has(b)) gateOf.set(b, a); if (ramp.has(a)) gateOf.set(a, b); }
+  const r3 = (v) => +v.toFixed(3);
+  lv.nodes = lv.nodes.map(([x, y], n) => (n < ringNodes ? [r3(x * k), r3(y * k)] : [x, y]));
+  for (const [n, [dx, dy]] of ramp) {
+    const g = lv.nodes[gateOf.get(n)];
+    lv.nodes[n] = [r3(g[0] + dx * 0.8), r3(g[1] + dy * 0.8)];
+  }
+  lv.parks = lv.parks.map(([x, y, r]) => [r3(x * k), r3(y * k), r3(r * k)]);
+  return lv;
+}
+
 function makeLevel(rng, spec) {
-  const m = GEN[spec.district](rng);
+  const m = GEN[spec.district](rng, SIZE[spec.district]);
   const nodes = m.nodes.map(([x, y]) => [+x.toFixed(3), +y.toFixed(3)]);
   const edges = m.edges.slice();
 
@@ -123,7 +145,7 @@ function makeLevel(rng, spec) {
   }
   if (cars.length < spec.cars) return null;
 
-  return {
+  const lv = {
     district: spec.district,
     nodes, edges, exits, starts, cars,
     units: Object.assign({ block: 0, spike: 0, traffic: 0, heli: 0 }, spec.units),
@@ -132,6 +154,7 @@ function makeLevel(rng, spec) {
     river: m.river || null,
     parks: (m.parks || []).map((p) => p.map((v) => +v.toFixed(3))),
   };
+  return spec.district === 'ringRoad' ? squeezeRing(lv, m.nodes.length, RING_SQUEEZE) : lv;
 }
 
 function check(level, spec) {

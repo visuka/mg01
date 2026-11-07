@@ -64,8 +64,8 @@ function sideCands(nodes, W, H, gx, gy) {
 }
 
 // Old Town: crooked jittered streets, missing corners (plazas), diagonal lanes, dead ends.
-function oldTown(rng) {
-  const W = 5, H = 7;
+function oldTown(rng, o = {}) {
+  const W = o.W || 5, H = o.H || 7;
   const slot = (i, j) => j * W + i;
   const slots = [];
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
@@ -152,8 +152,8 @@ function ringRoad(rng) {
 }
 
 // Riverside: two banks joined by a few bridges.
-function riverside(rng) {
-  const W = 5, H = 8, RIVER = 3; // river between rows 3 and 4
+function riverside(rng, o = {}) {
+  const W = o.W || 5, H = o.H || 8, RIVER = o.RIVER != null ? o.RIVER : 3; // river between rows RIVER and RIVER+1
   const slot = (i, j) => j * W + i;
   const slots = [];
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
@@ -161,7 +161,7 @@ function riverside(rng) {
     slots.push([i + (rng() - 0.5) * jit * 1.2, j + (rng() - 0.5) * jit + (j <= RIVER ? -0.12 : 0.12)]);
   }
   const bridgeCount = 2 + (rng() < 0.5 ? 1 : 0);
-  const cols = shuffle(rng, [0, 1, 2, 3, 4]);
+  const cols = shuffle(rng, Array.from({ length: W }, (_, i) => i));
   const bridges = [];
   for (const c of cols) { if (bridges.length >= bridgeCount) break; if (bridges.every((b) => Math.abs(b - c) >= 2)) bridges.push(c); }
   let edges = [];

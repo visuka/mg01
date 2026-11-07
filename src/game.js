@@ -37,12 +37,10 @@
   const ROAD = 0.17;   // half road width, in street units
   const EDGE = 0.34;   // Downtown city edge beyond the outer streets
   // Framing kept tight so the map gets as much of a phone screen as possible.
-  const SIGN_OUT = 0.62;   // exit sign centre (and where escaping cars end), beyond the gate corner
-  const SIGN_W = 0.64, SIGN_H = 0.34;
-  const RAMP = 0.9;        // city exit ramp drawn past the gate
   const GROUND_PAD = 0.22; // city ground beyond the outermost corners
-  // Left and right exits are slim upright tabs right beside the gate: width is what phones lack.
-  const TAB_GAP = 0.18, TAB_W = 0.34, TAB_H = 0.86;
+  // Every exit is a slim tab just past its gate corner (the ramp ends under it, escaping cars stop on it):
+  // upright for left and right exits, lying flat for top and bottom ones.
+  const TAB_GAP = 0.18, TAB_W = 0.27, TAB_L = 0.86; // gap from the gate, thickness, length
   const TAB_MID = TAB_GAP + TAB_W / 2;
   const ZMAX = 2.6;        // pinch zoom limit
   const STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"%CLS%><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.5L12 17.3l-5.9 3.2 1.3-6.5-4.9-4.6 6.6-.8z"/></svg>';
@@ -129,15 +127,17 @@
     if (n < map.N) return map.pos[n];
     return exitPoint(n - map.N);
   }
-  // Exits pointing left or right (including diagonals) use an edge tab; up and down keep a road sign.
+  // Exits pointing left or right (including diagonals) get an upright tab; up and down a flat one.
   const sideExit = (i) => Math.abs(map.exitDirs[i][0]) >= Math.abs(map.exitDirs[i][1]) - 1e-6;
-  function exitPoint(i, along) {
+  const tabSize = (i) => (sideExit(i) ? [TAB_W, TAB_L] : [TAB_L, TAB_W]);
+  // Point `along` past the gate (measured across the tab); the middle of the exit tab by default.
+  function exitPoint(i, along = TAB_MID) {
     const g = map.pos[map.gates[i]], d = map.exitDirs[i];
-    const k = along != null ? along : sideExit(i) ? TAB_MID / Math.abs(d[0]) : SIGN_OUT;
+    const k = along / Math.abs(d[sideExit(i) ? 0 : 1]);
     return [g[0] + d[0] * k, g[1] + d[1] * k];
   }
-  // Side ramps stop under the middle of the tab, so the road's rounded end stays hidden behind it.
-  const rampEnd = (i) => exitPoint(i, sideExit(i) ? TAB_MID / Math.abs(map.exitDirs[i][0]) : RAMP);
+  // Ramps stop just inside the tab, so the road's rounded end (curb included) stays hidden behind it.
+  const rampEnd = (i) => exitPoint(i, TAB_GAP + TAB_W - ROAD - 0.05);
 
   // ---------- names for the radio ----------
   const corner = (n) => { const [x, y] = map.pos[n]; return `${STREETS[y]} & ${AVES[x]}`; };
@@ -439,18 +439,8 @@
     canvas.width = Math.round(L.W * dpr);
     canvas.height = Math.round(L.H * dpr);
     if (!map) return;
-    let x0, y0, x1, y1;
-    if (isGrid()) {
-      const side = [0, 0, 0, 0];
-      level.exits.forEach((e) => { side[e[2]] = 1; });
-      const sx = Math.max(EDGE + 0.06, TAB_GAP + TAB_W + 0.02); // side tabs, measured from the gate
-      const sy = SIGN_OUT + SIGN_H / 2 + 0.03;                   // top/bottom signs
-      x0 = -(side[3] ? sx : EDGE + 0.06); x1 = map.grid.w - 1 + (side[1] ? sx : EDGE + 0.06);
-      y0 = -(side[0] ? sy : EDGE + 0.06); y1 = map.grid.h - 1 + (side[2] ? sy : EDGE + 0.06);
-    } else {
-      const b = cityBounds();
-      [x0, y0, x1, y1] = b.view;
-    }
+    const e = EDGE + 0.06;
+    const [x0, y0, x1, y1] = isGrid() ? withTabs([-e, -e, map.grid.w - 1 + e, map.grid.h - 1 + e]) : cityBounds().view;
     base.s = Math.min(L.W / (x1 - x0), L.H / (y1 - y0), 92);
     base.ox = (L.W - (x1 - x0) * base.s) / 2 - x0 * base.s;
     base.oy = (L.H - (y1 - y0) * base.s) / 2 - y0 * base.s;
@@ -491,60 +481,67 @@
     for (const [x, y] of map.pos) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
     const P = GROUND_PAD;
     const ground = [x0 - P, y0 - P, x1 + P, y1 + P];
-    const view = ground.slice();
+    return { ground, view: withTabs(ground) };
+  }
+  // The view grown to take in every exit tab, with a little margin.
+  function withTabs(box) {
+    const view = box.slice();
     map.gates.forEach((g, i) => {
-      const c = exitPoint(i), side = sideExit(i);
-      const hw = (side ? TAB_W : SIGN_W) / 2 + 0.02, hh = (side ? TAB_H : SIGN_H) / 2 + 0.03;
+      const c = exitPoint(i), [tw, th] = tabSize(i);
+      const hw = tw / 2 + 0.02, hh = th / 2 + 0.03;
       view[0] = Math.min(view[0], c[0] - hw); view[2] = Math.max(view[2], c[0] + hw);
       view[1] = Math.min(view[1], c[1] - hh); view[3] = Math.max(view[3], c[1] + hh);
     });
-    return { ground, view };
+    return view;
   }
 
-  // Slim upright exit tab for left/right exits: arrow, EXIT reading upward, highway number.
-  function drawTab(g, cx, cy, i, dirX) {
-    const s = L.s, w = s * TAB_W, h = s * TAB_H;
+  // Font at the given size, shrunk if the text would be wider than maxW.
+  function fitFont(g, text, weight, size, maxW) {
+    g.font = `${weight} ${size}px ${FONT_LABEL}`;
+    const w = g.measureText(text).width;
+    if (w > maxW) g.font = `${weight} ${Math.max(6, Math.floor((size * maxW) / w))}px ${FONT_LABEL}`;
+  }
+  // Exit tab: arrow pointing out of town, EXIT, highway number.
+  function drawExitMarker(g, i) {
+    const s = L.s, [x, y] = exitPoint(i), cx = px(x), cy = py(y);
+    const [tw, th] = tabSize(i), w = tw * s, h = th * s;
+    const thick = TAB_W * s, len = TAB_L * s, inner = thick - s * 0.07;
     g.fillStyle = COL['exit-green'];
     rr(g, cx - w / 2, cy - h / 2, w, h, s * 0.06); g.fill();
     g.strokeStyle = 'rgba(255,255,255,0.9)';
     g.lineWidth = Math.max(1, s * 0.016);
     rr(g, cx - w / 2 + s * 0.025, cy - h / 2 + s * 0.025, w - s * 0.05, h - s * 0.05, s * 0.04); g.stroke();
     g.fillStyle = '#ffffff';
-    // arrow pointing out of town
-    const ay = cy - h * 0.33, aw = w * 0.26;
-    g.beginPath();
-    g.moveTo(cx + dirX * aw, ay); g.lineTo(cx - dirX * aw * 0.6, ay - aw * 0.9); g.lineTo(cx - dirX * aw * 0.6, ay + aw * 0.9);
-    g.closePath(); g.fill();
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.save();
-    g.translate(cx, cy + h * 0.02);
-    g.rotate(-Math.PI / 2);
-    g.font = `700 ${Math.max(9, Math.round(s * 0.14))}px ${FONT_LABEL}`;
-    g.fillText('EXIT', 0, 0);
-    g.restore();
-    g.font = `600 ${Math.max(8, Math.round(s * 0.115))}px ${FONT_LABEL}`;
-    g.fillText(String(HWYS[i % HWYS.length]), cx, cy + h * 0.34);
-  }
-  function drawExitMarker(g, i) {
-    const [x, y] = exitPoint(i);
-    if (sideExit(i)) drawTab(g, px(x), py(y), i, Math.sign(map.exitDirs[i][0]) || 1);
-    else drawSign(g, px(x), py(y), i);
-  }
-
-  function drawSign(g, sx, sy, i) {
-    const s = L.s, sw = s * SIGN_W, sh = s * SIGN_H;
-    g.fillStyle = COL['exit-green'];
-    rr(g, sx - sw / 2, sy - sh / 2, sw, sh, s * 0.05); g.fill();
-    g.strokeStyle = 'rgba(255,255,255,0.9)';
-    g.lineWidth = Math.max(1, s * 0.018);
-    rr(g, sx - sw / 2 + s * 0.025, sy - sh / 2 + s * 0.025, sw - s * 0.05, sh - s * 0.05, s * 0.035); g.stroke();
-    g.fillStyle = '#ffffff';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.font = `700 ${Math.max(9, Math.round(s * 0.14))}px ${FONT_LABEL}`;
-    g.fillText('EXIT', sx, sy - sh * 0.18);
-    g.font = `600 ${Math.max(8, Math.round(s * 0.115))}px ${FONT_LABEL}`;
-    g.fillText(exitName(i).toUpperCase(), sx, sy + sh * 0.22);
+    const num = String(HWYS[i % HWYS.length]), aw = thick * 0.3;
+    // Arrow: (ax, ay) is its middle, (ux, uy) the way out of town.
+    const arrow = (ax, ay, ux, uy) => {
+      g.beginPath();
+      g.moveTo(ax + ux * aw, ay + uy * aw);
+      g.lineTo(ax - ux * aw * 0.6 - uy * aw * 0.9, ay - uy * aw * 0.6 + ux * aw * 0.9);
+      g.lineTo(ax - ux * aw * 0.6 + uy * aw * 0.9, ay - uy * aw * 0.6 - ux * aw * 0.9);
+      g.closePath(); g.fill();
+    };
+    const label = Math.max(8, Math.round(s * 0.14)), small = Math.max(7, Math.round(s * 0.115));
+    if (sideExit(i)) {
+      // Upright: arrow on top, EXIT reading upward, number at the bottom.
+      arrow(cx, cy - len * 0.34, Math.sign(map.exitDirs[i][0]) || 1, 0);
+      g.save();
+      g.translate(cx, cy + len * 0.02);
+      g.rotate(-Math.PI / 2);
+      fitFont(g, 'EXIT', 700, Math.min(label, Math.round(inner * 0.85)), len * 0.42);
+      g.fillText('EXIT', 0, 0);
+      g.restore();
+      fitFont(g, num, 600, small, inner);
+      g.fillText(num, cx, cy + len * 0.35);
+    } else {
+      // Flat: arrow on the left, then EXIT and the number.
+      arrow(cx - len * 0.36, cy, 0, Math.sign(map.exitDirs[i][1]) || 1);
+      fitFont(g, 'EXIT', 700, Math.min(label, Math.round(inner * 0.85)), len * 0.4);
+      g.fillText('EXIT', cx - len * 0.04, cy);
+      fitFont(g, num, 600, small, len * 0.22);
+      g.fillText(num, cx + len * 0.33, cy);
+    }
   }
 
   function drawBankGlyph(g, x, y, wd, ht) {
@@ -680,15 +677,6 @@
     };
     const RIVER_HALF = 0.3;
 
-    // Exit ramps under everything outside the ground.
-    g.lineCap = 'round';
-    g.strokeStyle = COL.asphalt;
-    g.lineWidth = 2 * ROAD * s;
-    map.gates.forEach((gt, i) => {
-      const p = map.pos[gt], e = rampEnd(i);
-      g.beginPath(); g.moveTo(px(p[0]), py(p[1])); g.lineTo(px(e[0]), py(e[1])); g.stroke();
-    });
-
     g.fillStyle = COL.ground;
     rr(g, px(ground[0]), py(ground[1]), (ground[2] - ground[0]) * s, (ground[3] - ground[1]) * s, s * 0.2);
     g.fill();
@@ -739,11 +727,10 @@
     }
     g.restore();
 
-    // Streets: curb, then asphalt, with round joins at the corners.
+    // Streets and exit ramps: curb, then asphalt, with round joins at the corners.
     const stroke = (w, color) => {
       g.strokeStyle = color; g.lineWidth = w; g.lineCap = 'round';
-      for (const [a, b] of map.edges) {
-        const [ax, ay] = map.pos[a], [bx, by] = map.pos[b];
+      for (const [[ax, ay], [bx, by]] of segs) {
         g.beginPath(); g.moveTo(px(ax), py(ay)); g.lineTo(px(bx), py(by)); g.stroke();
       }
     };
@@ -1528,7 +1515,7 @@
     const escaped = state.crews.find((c) => c.status === 'escaped');
     $('result-line').textContent = won
       ? (state.crews.length > 1 ? 'Both crews in custody. Code 4.' : state.how === 'arrest' ? 'Arrest made. Code 4.' : 'Every route out sealed. Code 4.')
-      : `Suspect escaped on ${exitName(escaped.n - map.N)}.`;
+      : `${crewName(state.crews.indexOf(escaped))} escaped on ${exitName(escaped.n - map.N)}.`;
     $('stars').innerHTML = starsHTML(stars);
     $('stars').hidden = !won;
     for (let k = 0; k < stars; k++) setTimeout(() => sfx('star', k), 420 + k * 190);
