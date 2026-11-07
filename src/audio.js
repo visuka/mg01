@@ -136,8 +136,12 @@
       try { SFX[name] && SFX[name](arg); } catch (e) { /* never break the game for a sound */ }
     },
     buzz(pattern) {
-      if (!settings.vibrate || !root.navigator || !navigator.vibrate) return;
-      try { navigator.vibrate(pattern); } catch (e) { /* ignore */ }
+      if (!settings.vibrate) return;
+      try {
+        // Inside the phone app the native side vibrates (WebView has no reliable navigator.vibrate).
+        if (root.ReactNativeWebView) { root.ReactNativeWebView.postMessage(JSON.stringify({ t: 'vibrate', p: pattern })); return; }
+        if (root.navigator && navigator.vibrate) navigator.vibrate(pattern);
+      } catch (e) { /* ignore */ }
     },
     set(key, value) {
       settings[key] = !!value;

@@ -1682,6 +1682,15 @@
     updateHud();
     radio(`Rewound to the start of turn ${target + 1}. Try a different plan.`);
   }
+  // Android back button (phone app): close the top panel; false = nothing open, let the app exit.
+  window.MG_BACK = function () {
+    if (!$('ov-ad').hidden) return true; // an ad finishes or is skipped by its own buttons
+    if (!$('ov-buy').hidden) { $('buy-cancel').click(); return true; }
+    if (!$('ov-backup').hidden) { $('backup-cancel').click(); return true; }
+    if (!$('ov-cases').hidden) { $('ov-cases').hidden = true; return true; }
+    if (selectedCar != null) { selectedCar = null; updateHud(); return true; }
+    return false;
+  };
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (!$('ov-backup').hidden) $('backup-cancel').click();
