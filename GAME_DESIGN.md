@@ -306,7 +306,10 @@ Undo within a case stays free.
 **In the web prototype every ad and purchase is a test screen:** a 5-second "Test ad" card and a "Test purchase" sheet. Nothing real is shown or charged. All calls go through one interface (`src/ads.js`), so the Android build can swap in AdMob and Google Play Billing without touching the game.
 
 ### 14.6 Next: Android (v0.4)
-- [ ] Install Android Studio (includes the Android SDK and Java) on this PC.
-- [ ] Wrap the game with Capacitor and build a debug APK to install on a phone.
-- [ ] AdMob (test ad units first), Google Play Billing, app icon, splash screen.
-- [ ] Google Play developer account ($25 one-time), store listing, privacy policy, internal testing track.
+Decided 2026-11-07: use **Expo** (like the Steps app), not Capacitor. Expo's cloud builds the app, so no Android Studio is needed on this PC.
+- [x] Expo app shell in `mobile/`: the game in a WebView, Android back button, native vibration. Project `@neutcrafts/mg01` on the neutcrafts Expo account; package `com.neutcrafts.mg01`.
+- [x] First installable preview APK (Expo internal distribution).
+- [ ] Test on real phones: sound, vibration, saved progress after closing the app, back button.
+- [ ] AdMob (`react-native-google-mobile-ads`, test ad units first) and Google Play Billing, wired into `src/ads.js` through the WebView bridge.
+- [ ] Real app icon and splash screen (currently Expo placeholders).
+- [ ] Google Play: developer account (Neutcrafts), store listing, privacy policy, closed testing track.

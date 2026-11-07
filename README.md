@@ -15,6 +15,21 @@ A turn-based police puzzle for phones. See [GAME_DESIGN.md](GAME_DESIGN.md) for 
 - **Sound, music, vibration, tutorial bubbles.**
 - **Ads and purchases** are test screens in the web build (nothing real is shown or charged).
 
+## Phone app (Expo, `mobile/`)
+
+The Android/iOS app is an Expo app owned by the **neutcrafts** Expo account (`@neutcrafts/mg01`, https://expo.dev/accounts/neutcrafts/projects/mg01). It shows the same game in a full-screen WebView. `tools/build-mobile.js` packs `index.html` and `src/` into one page at `mobile/game/` (not committed: it is rebuilt before `npm start` and on Expo's build servers).
+
+```bash
+cd mobile
+npm install
+npm run typecheck
+npx eas-cli@latest build --platform android --profile preview
+```
+
+The last command builds an installable APK in Expo's cloud and prints a link. Open it on the phone and tap Install. Builds count against the neutcrafts account's monthly Expo plan. The `production` profile makes the Play Store bundle.
+
+Phone-only behaviour: the Android back button closes the open panel (then exits), and vibration goes through the native side. Ads and purchases are still test screens.
+
 ## Run it locally
 
 ```bash
@@ -62,3 +77,5 @@ Confirms Downtown (Cases 1–15, frozen in `src/levels-downtown.js`) still solve
 | `tools/generate-daily.js` | Daily Heist generator (reuses the city checks) |
 | `tools/check-downtown.js` | Downtown regression check |
 | `tools/serve.js` | Local playtest server |
+| `tools/build-mobile.js` | Packs the game into one page for the phone app |
+| `mobile/` | Expo app shell (WebView, back button, vibration); `app.json`, `eas.json` |
