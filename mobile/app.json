@@ -20,11 +20,18 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["android.permission.VIBRATE"],
+      "permissions": [
+        "android.permission.VIBRATE"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c2fb922e-e98f-40a8-b17f-f809cdf168c5"
+      }
     }
   }
 }
