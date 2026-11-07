@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+Thumbs.db
+*.log
+.claude/settings.local.json
+# Android build output (Capacitor, later)
+android/app/build/
+android/.gradle/
+*.keystore
+*.jks
