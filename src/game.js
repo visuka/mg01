@@ -35,12 +35,15 @@
     4: 'masterminds. They count your units and steer where you cannot box them in.',
   };
   const ROAD = 0.17;   // half road width, in street units
-  const EDGE = 0.4;    // Downtown city edge beyond the outer streets
+  const EDGE = 0.34;   // Downtown city edge beyond the outer streets
   // Framing kept tight so the map gets as much of a phone screen as possible.
   const SIGN_OUT = 0.62;   // exit sign centre (and where escaping cars end), beyond the gate corner
   const SIGN_W = 0.64, SIGN_H = 0.34;
   const RAMP = 0.9;        // city exit ramp drawn past the gate
-  const GROUND_PAD = 0.28; // city ground beyond the outermost corners
+  const GROUND_PAD = 0.22; // city ground beyond the outermost corners
+  // Left and right exits are slim upright tabs right beside the gate: width is what phones lack.
+  const TAB_GAP = 0.18, TAB_W = 0.34, TAB_H = 0.86;
+  const TAB_MID = TAB_GAP + TAB_W / 2;
   const ZMAX = 2.6;        // pinch zoom limit
   const STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"%CLS%><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.5L12 17.3l-5.9 3.2 1.3-6.5-4.9-4.6 6.6-.8z"/></svg>';
   const ICON = {
@@ -124,9 +127,17 @@
 
   function gpos(n) {
     if (n < map.N) return map.pos[n];
-    const i = n - map.N, g = map.pos[map.gates[i]], d = map.exitDirs[i];
-    return [g[0] + d[0] * SIGN_OUT, g[1] + d[1] * SIGN_OUT];
+    return exitPoint(n - map.N);
   }
+  // Exits pointing left or right (including diagonals) use an edge tab; up and down keep a road sign.
+  const sideExit = (i) => Math.abs(map.exitDirs[i][0]) >= Math.abs(map.exitDirs[i][1]) - 1e-6;
+  function exitPoint(i, along) {
+    const g = map.pos[map.gates[i]], d = map.exitDirs[i];
+    const k = along != null ? along : sideExit(i) ? TAB_MID / Math.abs(d[0]) : SIGN_OUT;
+    return [g[0] + d[0] * k, g[1] + d[1] * k];
+  }
+  // Side ramps stop under the middle of the tab, so the road's rounded end stays hidden behind it.
+  const rampEnd = (i) => exitPoint(i, sideExit(i) ? TAB_MID / Math.abs(map.exitDirs[i][0]) : RAMP);
 
   // ---------- names for the radio ----------
   const corner = (n) => { const [x, y] = map.pos[n]; return `${STREETS[y]} & ${AVES[x]}`; };
@@ -415,10 +426,7 @@
   // Road segments of a city map (streets plus exit ramps), in street units.
   function citySegments() {
     const segs = map.edges.map(([a, b]) => [map.pos[a], map.pos[b]]);
-    map.gates.forEach((g, i) => {
-      const p = map.pos[g], d = map.exitDirs[i];
-      segs.push([p, [p[0] + d[0] * RAMP, p[1] + d[1] * RAMP]]);
-    });
+    map.gates.forEach((g, i) => segs.push([map.pos[g], rampEnd(i)]));
     return segs;
   }
 
@@ -435,9 +443,10 @@
     if (isGrid()) {
       const side = [0, 0, 0, 0];
       level.exits.forEach((e) => { side[e[2]] = 1; });
-      const sx = 0.24 + SIGN_W / 2 + 0.02, sy = 0.24 + SIGN_H / 2 + 0.03; // sign extents past the edge
-      x0 = -(EDGE + (side[3] ? sx : 0.06)); x1 = map.grid.w - 1 + EDGE + (side[1] ? sx : 0.06);
-      y0 = -(EDGE + (side[0] ? sy : 0.06)); y1 = map.grid.h - 1 + EDGE + (side[2] ? sy : 0.06);
+      const sx = Math.max(EDGE + 0.06, TAB_GAP + TAB_W + 0.02); // side tabs, measured from the gate
+      const sy = SIGN_OUT + SIGN_H / 2 + 0.03;                   // top/bottom signs
+      x0 = -(side[3] ? sx : EDGE + 0.06); x1 = map.grid.w - 1 + (side[1] ? sx : EDGE + 0.06);
+      y0 = -(side[0] ? sy : EDGE + 0.06); y1 = map.grid.h - 1 + (side[2] ? sy : EDGE + 0.06);
     } else {
       const b = cityBounds();
       [x0, y0, x1, y1] = b.view;
@@ -484,12 +493,42 @@
     const ground = [x0 - P, y0 - P, x1 + P, y1 + P];
     const view = ground.slice();
     map.gates.forEach((g, i) => {
-      const p = map.pos[g], d = map.exitDirs[i];
-      const c = [p[0] + d[0] * SIGN_OUT, p[1] + d[1] * SIGN_OUT];
-      view[0] = Math.min(view[0], c[0] - SIGN_W / 2 - 0.03); view[2] = Math.max(view[2], c[0] + SIGN_W / 2 + 0.03);
-      view[1] = Math.min(view[1], c[1] - SIGN_H / 2 - 0.03); view[3] = Math.max(view[3], c[1] + SIGN_H / 2 + 0.03);
+      const c = exitPoint(i), side = sideExit(i);
+      const hw = (side ? TAB_W : SIGN_W) / 2 + 0.02, hh = (side ? TAB_H : SIGN_H) / 2 + 0.03;
+      view[0] = Math.min(view[0], c[0] - hw); view[2] = Math.max(view[2], c[0] + hw);
+      view[1] = Math.min(view[1], c[1] - hh); view[3] = Math.max(view[3], c[1] + hh);
     });
     return { ground, view };
+  }
+
+  // Slim upright exit tab for left/right exits: arrow, EXIT reading upward, highway number.
+  function drawTab(g, cx, cy, i, dirX) {
+    const s = L.s, w = s * TAB_W, h = s * TAB_H;
+    g.fillStyle = COL['exit-green'];
+    rr(g, cx - w / 2, cy - h / 2, w, h, s * 0.06); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.9)';
+    g.lineWidth = Math.max(1, s * 0.016);
+    rr(g, cx - w / 2 + s * 0.025, cy - h / 2 + s * 0.025, w - s * 0.05, h - s * 0.05, s * 0.04); g.stroke();
+    g.fillStyle = '#ffffff';
+    // arrow pointing out of town
+    const ay = cy - h * 0.33, aw = w * 0.26;
+    g.beginPath();
+    g.moveTo(cx + dirX * aw, ay); g.lineTo(cx - dirX * aw * 0.6, ay - aw * 0.9); g.lineTo(cx - dirX * aw * 0.6, ay + aw * 0.9);
+    g.closePath(); g.fill();
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.save();
+    g.translate(cx, cy + h * 0.02);
+    g.rotate(-Math.PI / 2);
+    g.font = `700 ${Math.max(9, Math.round(s * 0.14))}px ${FONT_LABEL}`;
+    g.fillText('EXIT', 0, 0);
+    g.restore();
+    g.font = `600 ${Math.max(8, Math.round(s * 0.115))}px ${FONT_LABEL}`;
+    g.fillText(String(HWYS[i % HWYS.length]), cx, cy + h * 0.34);
+  }
+  function drawExitMarker(g, i) {
+    const [x, y] = exitPoint(i);
+    if (sideExit(i)) drawTab(g, px(x), py(y), i, Math.sign(map.exitDirs[i][0]) || 1);
+    else drawSign(g, px(x), py(y), i);
   }
 
   function drawSign(g, sx, sy, i) {
@@ -539,11 +578,9 @@
     const minX = -EDGE, minY = -EDGE, maxX = w - 1 + EDGE, maxY = h - 1 + EDGE;
     g.strokeStyle = COL.asphalt;
     g.lineWidth = 2 * ROAD * s;
-    level.exits.forEach(([x, y, d]) => {
-      g.beginPath();
-      g.moveTo(px(x), py(y));
-      g.lineTo(px(x + MG.DIRS[d][0] * (EDGE + 0.5)), py(y + MG.DIRS[d][1] * (EDGE + 0.5)));
-      g.stroke();
+    map.gates.forEach((gt, i) => {
+      const [ex, ey] = rampEnd(i), [x, y] = map.pos[gt];
+      g.beginPath(); g.moveTo(px(x), py(y)); g.lineTo(px(ex), py(ey)); g.stroke();
     });
     g.fillStyle = COL.ground;
     rr(g, px(minX), py(minY), (maxX - minX) * s, (maxY - minY) * s, s * 0.16);
@@ -596,11 +633,8 @@
       g.fillRect(px(x) - ROAD * s, py(y) - ROAD * s, 2 * ROAD * s, 2 * ROAD * s);
     }
     laneDashes(g, map.edges.map(([a, b]) => [map.pos[a], map.pos[b]]).concat(
-      level.exits.map(([x, y, d]) => [[x, y], [x + MG.DIRS[d][0] * (EDGE + 0.5), y + MG.DIRS[d][1] * (EDGE + 0.5)]])));
-    level.exits.forEach(([x, y, d], i) => {
-      const along = EDGE + 0.24; // sits on the ramp, just outside the city edge
-      drawSign(g, px(x + MG.DIRS[d][0] * along), py(y + MG.DIRS[d][1] * along), i);
-    });
+      map.gates.map((gt, i) => [map.pos[gt], rampEnd(i)])));
+    map.gates.forEach((_, i) => drawExitMarker(g, i));
     return off;
   }
 
@@ -651,8 +685,8 @@
     g.strokeStyle = COL.asphalt;
     g.lineWidth = 2 * ROAD * s;
     map.gates.forEach((gt, i) => {
-      const p = map.pos[gt], d = map.exitDirs[i];
-      g.beginPath(); g.moveTo(px(p[0]), py(p[1])); g.lineTo(px(p[0] + d[0] * RAMP), py(p[1] + d[1] * RAMP)); g.stroke();
+      const p = map.pos[gt], e = rampEnd(i);
+      g.beginPath(); g.moveTo(px(p[0]), py(p[1])); g.lineTo(px(e[0]), py(e[1])); g.stroke();
     });
 
     g.fillStyle = COL.ground;
@@ -729,10 +763,7 @@
     const bsz = clamp(bd * 2 - 0.1, 0.24, 0.42) * s;
     drawBankGlyph(g, px(best[0]) - bsz / 2, py(best[1]) - bsz / 2, bsz, bsz);
 
-    map.gates.forEach((gt, i) => {
-      const p = map.pos[gt], d = map.exitDirs[i];
-      drawSign(g, px(p[0] + d[0] * SIGN_OUT), py(p[1] + d[1] * SIGN_OUT), i);
-    });
+    map.gates.forEach((_, i) => drawExitMarker(g, i));
     return off;
   }
 
