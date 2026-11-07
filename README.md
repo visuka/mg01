@@ -9,7 +9,7 @@ A turn-based police puzzle for phones. See [GAME_DESIGN.md](GAME_DESIGN.md) for 
 - **Cases 1–15, Downtown:** grid streets, 1 order per turn.
 - **Cases 16–35:** you are promoted to Chief.
   - City road layouts: Old Town, Ring Road and Riverside.
-  - 3 orders per turn.
+  - Same turns as Downtown: you make one move, then the robbers move.
   - New units: spikes, traffic control and the chopper.
   - Smarter crews.
 - **Daily Heist** (opens at Chief).

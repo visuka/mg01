@@ -8,7 +8,7 @@
  *   - every crew starts with a way out, far enough from the exits,
  *   - a lazy chief (greedy, one plan per turn) loses,
  *   - the beam-search chief wins (this sets par).
- * If a spec keeps failing, its roadblock count is nudged up or down.
+ * If a spec keeps coming out too easy, units are taken away (or an exit added); too hard, a roadblock is added.
  */
 'use strict';
 const fs = require('fs');
@@ -29,36 +29,36 @@ function mulberry32(a) {
 const SPECS = [
   // Old Town: careful crews, then planners
   { id: 16, name: 'Promotion Day', district: 'oldTown', exits: 3, units: { block: 4, heli: 1 }, cars: 1, rank: 2, parMin: 2, parMax: 6,
-    hint: 'Promoted to Chief! Give up to 3 orders, then tap DISPATCH. Patrol cars now move 2 corners. CHOPPER shows their whole plan.' },
+    hint: 'You are the Chief now! Same game, bigger city: you make one move, then they move. Patrol cars drive up to 2 corners. The CHOPPER is free: it shows where they are going.' },
   { id: 17, name: 'Crooked Lanes', district: 'oldTown', exits: 4, units: { block: 3, spike: 1, heli: 1 }, cars: 1, rank: 2, parMin: 2, parMax: 6,
-    hint: 'New: SPIKE STRIP. A crew that drives over it loses its next move. Careful crews steer around spikes and patrol cars.' },
+    hint: 'New: SPIKES. A getaway car that drives over them gets stuck for a turn.' },
   { id: 18, name: 'Dead Ends', district: 'oldTown', exits: 4, units: { block: 3, spike: 2 }, cars: 2, rank: 2, parMin: 2, parMax: 6 },
   { id: 19, name: 'Detour', district: 'oldTown', exits: 4, units: { block: 3, traffic: 1, spike: 1, heli: 1 }, cars: 1, rank: 2, parMin: 2, parMax: 6,
-    hint: 'New: TRAFFIC CONTROL. Select it, then tap a street to close it for 2 turns.' },
+    hint: 'New: TRAFFIC. Tap it, then tap a street to close that street for 2 turns.' },
   { id: 20, name: 'Market Square', district: 'oldTown', exits: 4, units: { block: 3, spike: 1, traffic: 1, heli: 1 }, cars: 2, rank: 3, parMin: 2, parMax: 7,
-    hint: 'Intel: this crew PLANS. They pick the exit with the most backup roads, not just the closest one.' },
+    hint: 'Smart robbers! They head for the exit with the most roads to it, not just the closest one.' },
   { id: 21, name: 'Back Alleys', district: 'oldTown', exits: 5, units: { block: 4, spike: 1, traffic: 1, heli: 1 }, cars: 1, rank: 3, parMin: 2, parMax: 7 },
   { id: 22, name: 'Old Town Lockdown', district: 'oldTown', exits: 5, units: { block: 4, spike: 2, traffic: 1, heli: 1 }, cars: 2, rank: 3, parMin: 3, parMax: 7 },
   // Ring Road: planners, masterminds, fast cars
   { id: 23, name: 'Ring Road', district: 'ringRoad', exits: 4, units: { block: 4, spike: 1, heli: 1 }, cars: 1, rank: 3, parMin: 2, parMax: 7,
-    hint: 'Ring Road district. The ring lets crews circle round to another exit. Watch the spokes.' },
+    hint: 'Ring Road: robbers can drive round the ring to another exit. Block the roads in and out.' },
   { id: 24, name: 'Spokes', district: 'ringRoad', exits: 5, units: { block: 4, spike: 1, traffic: 1 }, cars: 2, rank: 3, parMin: 2, parMax: 7 },
   { id: 25, name: 'Mastermind', district: 'ringRoad', exits: 5, units: { block: 4, spike: 1, traffic: 1, heli: 1 }, cars: 1, rank: 4, parMin: 2, parMax: 7,
-    hint: 'Intel: MASTERMINDS. They count your units and steer where you cannot box them in next turn.' },
+    hint: 'Master thieves! They dodge away from places you could trap them.' },
   { id: 26, name: 'Roundabout', district: 'ringRoad', exits: 5, units: { block: 4, spike: 2, traffic: 1, heli: 1 }, cars: 2, rank: 4, parMin: 3, parMax: 7 },
-  { id: 27, name: 'Fast Lane', district: 'ringRoad', exits: 4, units: { block: 4, spike: 2, heli: 1 }, cars: 2, rank: 3, speed: 3, parMin: 2, parMax: 7,
-    hint: 'Intel: FAST CAR. It drives 3 corners per turn. A spike strip stops it cold.' },
-  { id: 28, name: 'Outer Loop', district: 'ringRoad', exits: 5, units: { block: 5, spike: 2, traffic: 1, heli: 1 }, cars: 2, rank: 4, speed: 3, parMin: 2, parMax: 7 },
-  { id: 29, name: 'Full Circle', district: 'ringRoad', exits: 5, units: { block: 5, spike: 2, traffic: 2, heli: 1 }, cars: 2, rank: 4, speed: 3, parMin: 3, parMax: 8 },
+  { id: 27, name: 'Fast Lane', district: 'ringRoad', exits: 4, units: { block: 4, spike: 2, heli: 1 }, cars: 2, rank: 3, speed: 2, parMin: 2, parMax: 7,
+    hint: 'Fast car! It drives 2 corners every turn. Spikes stop it.' },
+  { id: 28, name: 'Outer Loop', district: 'ringRoad', exits: 5, units: { block: 5, spike: 2, traffic: 1, heli: 1 }, cars: 2, rank: 4, speed: 2, parMin: 2, parMax: 7 },
+  { id: 29, name: 'Full Circle', district: 'ringRoad', exits: 5, units: { block: 5, spike: 2, traffic: 2, heli: 1 }, cars: 2, rank: 4, speed: 2, parMin: 3, parMax: 8 },
   // Riverside: split crews
   { id: 30, name: 'Split Up', district: 'riverside', exits: 4, units: { block: 4, spike: 1, heli: 1 }, cars: 2, rank: 2, crews: 2, parMin: 2, parMax: 7,
-    hint: 'Riverside. The crew split the loot between TWO cars. Catch both. The bridges are your choke points.' },
+    hint: 'Riverside: TWO getaway cars! Catch both. Block the bridges.' },
   { id: 31, name: 'Bridges', district: 'riverside', exits: 4, units: { block: 4, spike: 2, traffic: 1, heli: 1 }, cars: 2, rank: 3, crews: 2, parMin: 2, parMax: 7 },
   { id: 32, name: 'Low Tide', district: 'riverside', exits: 5, units: { block: 5, spike: 2, traffic: 1, heli: 1 }, cars: 2, rank: 3, crews: 2, parMin: 3, parMax: 8 },
   { id: 33, name: 'Drawbridge', district: 'riverside', exits: 5, units: { block: 5, spike: 2, traffic: 2, heli: 1 }, cars: 2, rank: 4, crews: 2, parMin: 3, parMax: 8 },
   { id: 34, name: 'Riverside Run', district: 'riverside', exits: 5, units: { block: 5, spike: 2, traffic: 2, heli: 1 }, cars: 3, rank: 4, crews: 2, parMin: 3, parMax: 8 },
   { id: 35, name: 'Citywide Manhunt', district: 'riverside', exits: 6, units: { block: 6, spike: 2, traffic: 2, heli: 2 }, cars: 3, rank: 4, crews: 2, parMin: 3, parMax: 9,
-    hint: 'Every unit in the city is yours, Chief. Two masterminds, six exits. Bring them in.' },
+    hint: 'Every unit in the city is yours, Chief. Two cars of master thieves, six exits. Catch them!' },
 ];
 
 function hops(nodes, edges, from) {
@@ -124,7 +124,7 @@ function makeLevel(rng, spec) {
 
   const gates = exits.map((e) => e[0]);
   // Crews need at least two turns of driving to reach an exit.
-  const minDist = spec.minDist || (spec.speed >= 3 ? 4 : 3);
+  const minDist = spec.minDist || (spec.speed >= 2 ? 4 : 3);
   const { d, adj } = hops(nodes, edges, gates);
   const pool = GEN.shuffle(rng, nodes.map((_, i) => i).filter((i) => d[i] >= minDist && !gates.includes(i)));
   if (!pool.length) return null;
@@ -149,7 +149,7 @@ function makeLevel(rng, spec) {
     district: spec.district,
     nodes, edges, exits, starts, cars,
     units: Object.assign({ block: 0, spike: 0, traffic: 0, heli: 0 }, spec.units),
-    orders: 3, carRange: 2, keepAway: true,
+    orders: 1, carRange: 2, // one move per turn, like Downtown; patrol cars drive up to 2 corners
     crew: { rank: spec.rank, speed: spec.speed },
     river: m.river || null,
     parks: (m.parks || []).map((p) => p.map((v) => +v.toFixed(3))),
@@ -168,13 +168,30 @@ function check(level, spec) {
   if (spec.id >= 20) {
     // Later cases must also beat a chief who keeps three plans open.
     const medium = solveBeam(level, { width: 3, K: 8, maxTurns: 10, maxEvals: 60000 });
-    if (medium && !medium.aborted) return { ok: false, why: 'too easy' };
+    if (medium && !medium.aborted) return { ok: false, why: 'medium wins' };
   }
   const beam = solveBeam(level, { width: 28, K: 9, maxTurns: 10, maxEvals: 160000 });
   if (!beam || beam.aborted) return { ok: false, why: beam ? 'beam aborted' : 'too hard' };
   if (beam.par < spec.parMin) return { ok: false, why: 'par low' };
   if (beam.par > spec.parMax) return { ok: false, why: 'par high' };
   return { ok: true, par: beam.par, line: beam.line };
+}
+
+// Called every 30 failed tries. One move per turn makes generous units easy, so when most tries
+// come out too easy, take something away: roadblocks down to 2, then patrol cars, traffic and spikes
+// down to 1, then the last roadblock; at the end, open another exit. Mostly too hard: add a roadblock.
+function nudge(spec, why) {
+  const easy = (why['too easy'] || 0) + (why['medium wins'] || 0) + (why['par low'] || 0), hard = why['too hard'] || 0;
+  const u = spec.units;
+  if (hard > easy * 2) { u.block++; return 'block+'; }
+  if (easy <= hard * 2) return null;
+  if (u.block > 2) { u.block--; return 'block-'; }
+  if (spec.cars > 1) { spec.cars--; return 'cars-'; }
+  if (u.traffic > 1) { u.traffic--; return 'traffic-'; }
+  if (u.spike > 1) { u.spike--; return 'spike-'; }
+  if (u.block > 1) { u.block--; return 'block-'; }
+  if (spec.exits < (spec.district === 'ringRoad' ? 5 : 6)) { spec.exits++; return 'exits+'; } // a ring has room for 5 spread-out exits
+  return null;
 }
 
 function main() {
@@ -192,24 +209,20 @@ function main() {
     }
     const spec = JSON.parse(JSON.stringify(base));
     spec.units = Object.assign({ block: 0, spike: 0, traffic: 0, heli: 0 }, spec.units);
-    spec.speed = spec.speed || 2; // pros drive 2 corners per turn from Case 16
-    const rng = mulberry32(20261107 + base.id * 104729);
+    spec.speed = spec.speed || 1; // one corner per turn; fast cars (Cases 27-29) drive 2
+    let rng = mulberry32(20261107 + base.id * 104729);
     const ts = Date.now();
     let found = null, tries = 0;
     const why = {};
-    while (!found && tries < 240) {
+    while (!found && tries < 480) {
+      if (tries === 240) rng = mulberry32(991003 + base.id * 7919); // second seed
       tries++;
       const lv = makeLevel(rng, spec);
       if (!lv) { why['no layout'] = (why['no layout'] || 0) + 1; continue; }
       const res = check(lv, spec);
       if (res.ok) { found = { lv, res }; break; }
       why[res.why] = (why[res.why] || 0) + 1;
-      // Nudge difficulty if one failure dominates.
-      if (tries % 30 === 0) {
-        const easy = (why['too easy'] || 0) + (why['par low'] || 0), hard = why['too hard'] || 0;
-        if (easy > hard * 2 && spec.units.block > 2) { spec.units.block--; why.nudged = 'block-'; }
-        else if (hard > easy * 2) { spec.units.block++; why.nudged = 'block+'; }
-      }
+      if (tries % 30 === 0) { const n = nudge(spec, why); if (n) why.nudged = (why.nudged ? why.nudged + ' ' : '') + n; }
     }
     if (!found) { console.log(`FAILED case ${base.id} ${base.name}: ${JSON.stringify(why)}`); continue; }
     const lv = Object.assign({ id: base.id, name: base.name }, base.hint ? { hint: base.hint } : {}, found.lv, { par: found.res.par });
@@ -230,4 +243,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { SPECS, makeLevel, check, mulberry32 };
+module.exports = { SPECS, makeLevel, check, nudge, mulberry32 };

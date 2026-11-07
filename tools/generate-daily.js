@@ -8,7 +8,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { makeLevel, check, mulberry32 } = require('./generate-city.js');
+const { makeLevel, check, nudge, mulberry32 } = require('./generate-city.js');
 
 // Monday (easy) to Sunday (hard).
 const WEEK = [
@@ -18,7 +18,7 @@ const WEEK = [
   { district: 'oldTown', exits: 5, units: { block: 4, spike: 1, traffic: 1, heli: 1 }, cars: 2, rank: 3 },
   { district: 'ringRoad', exits: 5, units: { block: 4, spike: 2, traffic: 1, heli: 1 }, cars: 1, rank: 4 },
   { district: 'riverside', exits: 5, units: { block: 5, spike: 2, traffic: 1, heli: 1 }, cars: 2, rank: 3, crews: 2 },
-  { district: 'ringRoad', exits: 5, units: { block: 5, spike: 2, traffic: 1, heli: 1 }, cars: 2, rank: 4, speed: 3 },
+  { district: 'ringRoad', exits: 5, units: { block: 5, spike: 2, traffic: 1, heli: 1 }, cars: 2, rank: 4, speed: 2 },
 ];
 const NAMES = [
   'Armored Truck', 'Jewel Job', 'Payroll Grab', 'Casino Night', 'Museum Gala', 'Vault Thirteen', 'Diamond Run',
@@ -35,24 +35,20 @@ function main() {
     const spec = JSON.parse(JSON.stringify(base));
     spec.id = 100 + k; // >= 20: also has to beat the medium chief
     spec.units = Object.assign({ block: 0, spike: 0, traffic: 0, heli: 0 }, spec.units);
-    spec.speed = spec.speed || 2;
+    spec.speed = spec.speed || 1;
     spec.parMin = 2; spec.parMax = 8;
     let rng = mulberry32(777001 + k * 7919);
     let found = null, tries = 0;
     const why = {};
     while (!found && tries < 480) {
-      if (tries === 240) { rng = mulberry32(991003 + k * 104723); spec.units.block = base.units.block; } // second seed
+      if (tries === 240) rng = mulberry32(991003 + k * 104723); // second seed
       tries++;
       const lv = makeLevel(rng, spec);
       if (!lv) { why['no layout'] = (why['no layout'] || 0) + 1; continue; }
       const res = check(lv, spec);
       if (res.ok) { found = { lv, res }; break; }
       why[res.why] = (why[res.why] || 0) + 1;
-      if (tries % 30 === 0) {
-        const easy = (why['too easy'] || 0) + (why['par low'] || 0), hard = why['too hard'] || 0;
-        if (easy > hard * 2 && spec.units.block > 2) spec.units.block--;
-        else if (hard > easy * 2) spec.units.block++;
-      }
+      if (tries % 30 === 0) nudge(spec, why);
     }
     if (!found) { console.log(`FAILED daily ${k + 1}: ${JSON.stringify(why)}`); continue; }
     const lv = Object.assign({ id: 1001 + k, daily: true, name: NAMES[k] }, found.lv, { par: found.res.par });

@@ -30,9 +30,9 @@
   const DISTRICT = { downtown: 'Downtown', oldTown: 'Old Town', ringRoad: 'Ring Road', riverside: 'Riverside' };
   const RANK = { 1: 'Rookies', 2: 'Careful', 3: 'Planners', 4: 'Masterminds' };
   const INTEL = {
-    2: 'careful crew. They steer around patrol cars and spikes.',
-    3: 'planners. They pick the exit with the most backup roads.',
-    4: 'masterminds. They count your units and steer where you cannot box them in.',
+    2: 'Careful robbers: they drive around patrol cars and spikes.',
+    3: 'Smart robbers: they head for the exit with the most roads to it.',
+    4: 'Master thieves: they dodge away from places you could trap them.',
   };
   const ROAD = 0.17;   // half road width, in street units
   const EDGE = 0.34;   // Downtown city edge beyond the outer streets
@@ -201,7 +201,10 @@
     mode = 'daily';
     setup(lv, restore);
   }
+  // Fingerprint of a case, so a saved game is only restored onto the same puzzle.
+  const levelSig = (lv) => [lv.id, lv.par, lv.orders || 1, (lv.nodes || []).length, (lv.edges || lv.cut || []).length].join(':');
   function setup(lv, restore) {
+    if (restore && restore.sig !== levelSig(lv)) restore = null;
     level = lv;
     map = MG.buildMap(level);
     const key = mode + ':' + level.id;
@@ -231,13 +234,13 @@
 
   function openingCall() {
     const lines = [mode === 'daily'
-      ? `Daily Heist: ${level.name}. ${plural(level.exits.length, 'highway exit')} open.`
-      : `Code 211 at First National. ${plural(level.exits.length, 'highway exit')} open.`];
+      ? `Daily Heist: ${level.name}. ${plural(level.exits.length, 'exit')} out of town.`
+      : `Bank robbery! ${plural(level.exits.length, 'exit')} out of town.`];
     if (!isGrid()) {
       const intel = INTEL[map.cfg.rank];
-      if (intel) lines.push(`Intel: ${intel}`);
+      if (intel) lines.push(intel);
       if (state.crews.length > 1) lines.push('Two getaway cars. Catch both.');
-      if (map.cfg.speed >= 3) lines.push('Fast car: 3 corners per turn.');
+      if (map.cfg.speed >= 2) lines.push(`Fast car: ${map.cfg.speed} corners every turn.`);
       return lines.join(' ');
     }
     const units = [];
@@ -251,7 +254,7 @@
     if (isGrid()) return null;
     let t = RANK[map.cfg.rank];
     if (state.crews.length > 1) t = '2 cars · ' + t;
-    if (map.cfg.speed >= 3) t += ' · Fast';
+    if (map.cfg.speed >= 2) t += ' · Fast';
     return t;
   }
 
@@ -272,9 +275,6 @@
       else el.addEventListener('click', () => onTool(d.key));
       box.appendChild(el);
     }
-    const multi = map.cfg.orders > 1;
-    $('orders').hidden = !multi;
-    $('btn-dispatch').hidden = !multi;
   }
 
   function updateHud() {
@@ -293,16 +293,8 @@
     const carEl = $('tool-car');
     carEl.querySelector('.tool-count').textContent = state.cars.length;
     carEl.classList.toggle('empty', state.cars.length === 0);
-    const orders = map.cfg.orders;
-    if (orders > 1) {
-      const left = orders - state.used;
-      $('orders').innerHTML = Array.from({ length: orders }, (_, k) => `<span class="pip${k < state.used ? ' used' : ''}"></span>`).join('');
-      $('orders').setAttribute('aria-label', `${plural(left, 'order')} left this turn`);
-    }
     const playing = state.status === 'play';
     $('btn-undo').disabled = history.length === 0 || busy || !playing;
-    $('btn-dispatch').disabled = busy || !playing;
-    $('btn-dispatch').classList.toggle('ready', playing && !busy && state.used > 0);
   }
 
   function onTool(key) {
@@ -738,8 +730,8 @@
     stroke(2 * ROAD * s, COL.asphalt);
     laneDashes(g, segs);
 
-    // Bank: the open spot nearest the first crew's start.
-    const start = map.pos[state.crews[0].n];
+    // Bank: the open spot nearest the first crew's start (not where they are now: the map is redrawn on zoom).
+    const start = map.pos[level.starts[0]];
     let best = null, bd = -1;
     for (let k = 0; k < 16; k++) {
       const a = (k / 16) * Math.PI * 2;
@@ -1120,9 +1112,8 @@
     // Patrol cars
     state.cars.forEach((n, i) => {
       const pose = carPose(i, t);
-      const spent = playing && state.moved.includes(i) && map.cfg.orders > 1;
-      drawCar(pose.pt[0], pose.pt[1], pose.ang, 'police', t, spent ? 0.6 : 1);
-      ctx.fillStyle = spent ? COL.muted : COL.ink;
+      drawCar(pose.pt[0], pose.pt[1], pose.ang, 'police', t, 1);
+      ctx.fillStyle = COL.ink;
       ctx.font = `700 ${Math.round(s * 0.13)}px ${FONT_LABEL}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.fillText('UNIT ' + (i + 1), px(pose.pt[0]), py(pose.pt[1]) + s * 0.24);
@@ -1174,7 +1165,7 @@
     else if (a.t === 'move') {
       if (res.events.arrest != null) parts.push(`Unit ${a.i + 1} made the arrest${at(a.n)}!`);
       else parts.push(isGrid() ? `Unit ${a.i + 1} to ${corner(a.n)}.` : `Unit ${a.i + 1} in position.`);
-    } else parts.push(map.cfg.orders > 1 ? 'Orders sent.' : 'Units holding position.');
+    } else parts.push('Units holding position.');
 
     if (s.status === 'won') {
       if (s.crews.length > 1) parts.push('Both crews in custody. Code 4.');
@@ -1196,9 +1187,6 @@
         else if (m.spiked) parts.push(`${crewName(m.ci)} hit the spikes!`);
         else if (m.path.length > 1) parts.push(`${crewName(m.ci)} ${movePhrase(m.path)}.`);
       }
-    } else if (map.cfg.orders > 1) {
-      const left = map.cfg.orders - s.used;
-      parts.push(left ? `${plural(left, 'order')} left.` : '');
     }
     return parts.filter(Boolean).join(' ');
   }
@@ -1271,13 +1259,10 @@
     updateHud();
     maybeCoach();
     const acts = MG.legalOrders(map, state);
-    const stuck = acts.length === 1 && acts[0].t === 'dispatch';
-    if (stuck && map.cfg.orders === 1) {
-      radio('No orders left to give. Units holding.');
+    if (acts.length === 1 && acts[0].t === 'dispatch') { // nothing left to do: the robbers drive on
+      radio('Nothing left to send. Units holding.');
       busy = true;
       setTimeout(() => { busy = false; doAction({ t: 'dispatch' }); }, 700);
-    } else if (stuck) {
-      radio('Nothing left to deploy this turn. Tap DISPATCH.');
     }
   }
 
@@ -1355,8 +1340,7 @@
       id === 1 && fresh && { key: 'c1-block', text: 'Tap this corner to set up a roadblock.', at: () => nodeScreen(map.gates[0]), gap: near },
       id === 2 && fresh && { key: 'c2-arrow', text: 'The orange arrow is their next move. Seal every road out.', at: () => nodeScreen(state.crews[0].n), gap: near },
       id === 4 && fresh && state.cars.length && { key: 'c4-car', text: 'Tap your patrol car, then a glowing corner.', at: () => nodeScreen(state.cars[0]), gap: near },
-      id === 16 && fresh && { key: 'c16-orders', text: 'Up to 3 orders, then DISPATCH.', at: () => elScreen('btn-dispatch', 'left'), side: 'left', gap: 12 },
-      id === 16 && !fresh && !state.reveal && state.stock.heli > 0 && { key: 'c16-heli', text: 'Free: the chopper shows their whole plan.', at: () => elScreen('tool-heli'), tool: 'heli' },
+      id === 16 && fresh && !state.reveal && state.stock.heli > 0 && { key: 'c16-heli', text: 'Free! The chopper shows where they are going.', at: () => elScreen('tool-heli'), tool: 'heli' },
       $('tool-spike') && { key: 'spike', text: 'New: spike strips. Select, then tap a corner.', at: () => elScreen('tool-spike'), tool: 'spike' },
       $('tool-traffic') && { key: 'traffic', text: 'New: traffic control. Select, then tap a street.', at: () => elScreen('tool-traffic'), tool: 'traffic' },
       !isGrid() && fresh && { key: 'zoom', text: 'Tip: pinch the map to zoom in.', at: () => { const r = canvas.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; } },
@@ -1529,7 +1513,7 @@
     if (rk) {
       $('promo-title').textContent = `Promoted to ${rk.name}`;
       $('promo-text').textContent = (rk.name === 'Chief'
-        ? 'You now give 3 orders per turn. New units: spike strips, traffic control and the chopper. The crews are pros now: they drive 2 corners per turn and get smarter every case. The Daily Heist is open too. '
+        ? 'Bigger cities and new units: spike strips, traffic control and the chopper. The robbers get smarter every case. The Daily Heist is open too. '
         : 'Your city trusts you with more. ') + `Rank bonus: +${META.RANK_BONUS} coins.`;
       setTimeout(() => sfx('rank'), 1100);
     }
@@ -1762,7 +1746,6 @@
   $('btn-cases-close').addEventListener('click', () => { $('ov-cases').hidden = true; });
   TABS.forEach((t) => $('tab-' + t).addEventListener('click', () => { hqTab = t; sfx('tap'); renderHQ(); }));
   $('btn-restart').addEventListener('click', () => { if (!busy) replay(); });
-  $('btn-dispatch').addEventListener('click', () => doAction({ t: 'dispatch' }));
   $('btn-undo').addEventListener('click', () => {
     if (busy || !history.length || state.status !== 'play') return;
     const heliLeft = state.stock.heli;
@@ -1831,14 +1814,15 @@
     META.checkRank(closedCount()); // catch up players who started before ranks existed
     const startAt = typeof data.levelIndex === 'number' ? data.levelIndex : Math.min(progress.unlocked, LEVELS.length) - 1;
     const ok = data.state && data.state.crews && data.state.status === 'play';
-    if (data.mode === 'daily' && dailyOpen()) loadDaily(ok ? { state: data.state, history: data.history || [] } : null);
-    else loadLevel(startAt, ok && data.levelIndex === startAt && data.mode !== 'daily' ? { state: data.state, history: data.history || [] } : null);
+    const saved = ok ? { state: data.state, history: data.history || [], sig: data.sig } : null;
+    if (data.mode === 'daily' && dailyOpen()) loadDaily(saved);
+    else loadLevel(startAt, data.levelIndex === startAt && data.mode !== 'daily' ? saved : null);
     updateDots();
     requestAnimationFrame(frame);
   }
   try {
     const hot = window.claude && window.claude.hot;
-    if (hot && hot.snapshot) hot.snapshot(() => ({ levelIndex, state, history, mode }));
+    if (hot && hot.snapshot) hot.snapshot(() => ({ levelIndex, state, history, mode, sig: level && levelSig(level) }));
   } catch (e) { /* not in a viewer */ }
 
   const fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();

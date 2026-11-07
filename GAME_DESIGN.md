@@ -177,7 +177,9 @@ Play it, show friends, adjust the rules, then build out the rest.
 Downtown (Cases 1–15, grid streets, 1 order per turn) stays as it is. It becomes the training ground.
 Everything below starts at **Case 16**.
 
-### 13.1 Promotion: 3 orders per turn
+### 13.1 Promotion (first built as 3 orders per turn, changed to one move on 2026-11-07)
+
+> **Changed 2026-11-07:** play-testing showed the 3-orders-then-Dispatch turn was hard to understand, for adults too. Now every case works like Downtown: **you make one move, then the robbers move.** There is no Dispatch button. The chopper stays free (it doesn't use your move). Crews drive 1 corner per turn (fast cars 2), and roadblocks can go right next to a crew, as in Downtown. Cases 16–35 and the Daily Heist were regenerated and re-checked by the solvers. The original design follows for the record.
 
 After closing Downtown you are **promoted to Chief**. From then on:
 

@@ -3,7 +3,7 @@
   'use strict';
   const KEY = 'mg01.profile.v1';
 
-  // Ranks go up as you close cases. Chief (after Case 15) is also the 3-orders promotion.
+  // Ranks go up as you close cases. Chief (after Case 15) opens the bigger cities.
   const RANKS = [
     { at: 0, name: 'Officer' },
     { at: 4, name: 'Sergeant' },

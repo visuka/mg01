@@ -161,10 +161,6 @@
   .tool.nudge { animation: nudge 0.4s ease; }
   @keyframes nudge { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
   .tray-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .orders { display: flex; align-items: center; gap: 6px; min-width: 0; }
-  .orders .eyebrow { margin-right: 2px; }
-  .pip { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--siren-blue); box-sizing: border-box; }
-  .pip.used { background: var(--siren-blue); }
   .tray-actions { display: flex; gap: 8px; margin-left: auto; }
   .btn {
     min-height: 44px;
@@ -182,8 +178,6 @@
   }
   .btn:disabled { opacity: 0.4; cursor: default; }
   .btn.primary { background: var(--siren-blue); border-color: transparent; color: #fff; }
-  .btn.ready { animation: ready 1.2s ease-in-out infinite; }
-  @keyframes ready { 50% { box-shadow: 0 0 0 4px rgba(61, 139, 255, 0.35); } }
   :focus-visible { outline: 3px solid var(--caution); outline-offset: 2px; }
 
   /* Overlays */
@@ -423,7 +417,7 @@
   @keyframes coach-bob { 50% { translate: 0 -3px; } }
 
   @media (prefers-reduced-motion: reduce) {
-    .stamp, .radio.flash .radio-text, .tool.nudge, .btn.ready, .coach, .reward-amt.pop { animation: none; }
+    .stamp, .radio.flash .radio-text, .tool.nudge, .coach, .reward-amt.pop { animation: none; }
   }
 </style>
 
@@ -445,7 +439,7 @@
 
   <div class="radio-slot">
     <div class="radio" id="radio" role="status" aria-live="polite" title="Tap to read the whole message">
-      <span class="radio-tag">DISPATCH</span>
+      <span class="radio-tag">RADIO</span>
       <span class="radio-text" id="radio-text">Code 211 at First National Bank.</span>
       <span class="radio-more" aria-hidden="true">MORE ▾</span>
     </div>
@@ -461,11 +455,9 @@
   <footer class="tray">
     <div class="tools" id="tools" role="toolbar" aria-label="Police units"></div>
     <div class="tray-row">
-      <div class="orders" id="orders" aria-label="Orders this turn"></div>
       <div class="tray-actions">
         <button class="btn" id="btn-undo">Undo</button>
         <button class="btn" id="btn-restart">Restart</button>
-        <button class="btn primary" id="btn-dispatch">Dispatch</button>
       </div>
     </div>
   </footer>
