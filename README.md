@@ -2,7 +2,9 @@
 
 A turn-based police puzzle for phones. See [GAME_DESIGN.md](GAME_DESIGN.md) for the full design.
 
+**Code:** https://github.com/visuka/mg01 (public)
 **Play online:** https://claude.ai/artifact/2ENqgaUHM6PwqKpLPtBJDD (private link, sign in to claude.ai)
+**Android app:** Expo project `@neutcrafts/mg01`, builds at https://expo.dev/accounts/neutcrafts/projects/mg01/builds
 
 - **Cases 1–15, Downtown:** grid streets, 1 order per turn.
 - **Cases 16–35:** you are promoted to Chief.
