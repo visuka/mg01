@@ -21,6 +21,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": [
+        "android.permission.VIBRATE",
         "android.permission.VIBRATE"
       ],
       "predictiveBackGestureEnabled": false
@@ -32,6 +33,12 @@
       "eas": {
         "projectId": "c2fb922e-e98f-40a8-b17f-f809cdf168c5"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c2fb922e-e98f-40a8-b17f-f809cdf168c5"
     }
   }
 }

@@ -35,7 +35,13 @@
     4: 'masterminds. They count your units and steer where you cannot box them in.',
   };
   const ROAD = 0.17;   // half road width, in street units
-  const EDGE = 0.5;    // Downtown city edge beyond the outer streets
+  const EDGE = 0.4;    // Downtown city edge beyond the outer streets
+  // Framing kept tight so the map gets as much of a phone screen as possible.
+  const SIGN_OUT = 0.62;   // exit sign centre (and where escaping cars end), beyond the gate corner
+  const SIGN_W = 0.64, SIGN_H = 0.34;
+  const RAMP = 0.9;        // city exit ramp drawn past the gate
+  const GROUND_PAD = 0.28; // city ground beyond the outermost corners
+  const ZMAX = 2.6;        // pinch zoom limit
   const STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"%CLS%><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.5L12 17.3l-5.9 3.2 1.3-6.5-4.9-4.6 6.6-.8z"/></svg>';
   const ICON = {
     block: '<svg viewBox="0 0 30 18" aria-hidden="true"><rect x="1" y="4" width="28" height="8" rx="2" fill="#ffc41f"/><path d="M6 4h4l-4 8H2zM14 4h4l-4 8h-4zM22 4h4l-4 8h-4z" fill="#0b1322"/><rect x="5" y="12" width="2.5" height="5" fill="#8796b3"/><rect x="22.5" y="12" width="2.5" height="5" fill="#8796b3"/></svg>',
@@ -108,6 +114,9 @@
   let decor = null, staticLayer = null, cityRoads = null;
   let planCache = { state: null };
   const L = { s: 40, ox: 0, oy: 0, dpr: 1, W: 0, H: 0 };
+  const base = { s: 40, ox: 0, oy: 0, view: [0, 0, 1, 1] }; // the whole map fitted to the board
+  const cam = { z: 1, x: 0, y: 0 };                          // pinch zoom and pan on top of that
+  let staticDirty = false;
 
   const px = (gx) => L.ox + gx * L.s;
   const py = (gy) => L.oy + gy * L.s;
@@ -116,7 +125,7 @@
   function gpos(n) {
     if (n < map.N) return map.pos[n];
     const i = n - map.N, g = map.pos[map.gates[i]], d = map.exitDirs[i];
-    return [g[0] + d[0] * 0.95, g[1] + d[1] * 0.95];
+    return [g[0] + d[0] * SIGN_OUT, g[1] + d[1] * SIGN_OUT];
   }
 
   // ---------- names for the radio ----------
@@ -135,13 +144,31 @@
     return `heading ${compass(MG.angleBetween(map, path[0], b))}`;
   }
 
-  function radio(text) {
-    const box = $('radio');
-    $('radio-text').textContent = text;
-    box.classList.remove('flash');
+  // The radio is always two lines tall. Longer messages show MORE; tap to open them over the map.
+  // open=true opens a long message right away (case hints), until the next tap anywhere.
+  function radio(text, open) {
+    const box = $('radio'), t = $('radio-text');
+    t.textContent = text;
+    box.classList.remove('flash', 'open');
     void box.offsetWidth;
     box.classList.add('flash');
+    if (checkRadioClip() && open) box.classList.add('open');
   }
+  function checkRadioClip() {
+    const box = $('radio'), t = $('radio-text');
+    if (box.classList.contains('open')) return true;
+    const clipped = t.scrollHeight > t.clientHeight + 2;
+    box.classList.toggle('clipped', clipped);
+    return clipped;
+  }
+  $('radio').addEventListener('click', () => {
+    const box = $('radio');
+    if (box.classList.contains('open')) box.classList.remove('open');
+    else if (box.classList.contains('clipped')) box.classList.add('open');
+  });
+  document.addEventListener('pointerdown', (e) => {
+    if (!$('radio').contains(e.target)) $('radio').classList.remove('open');
+  }, true);
 
   // ---------- level setup ----------
   function todayDaily() {
@@ -182,11 +209,12 @@
     tool = ['block', 'spike', 'traffic'].find((k) => state.stock[k] > 0) || 'block';
     decor = isGrid() ? makeDecor() : null;
     cityRoads = isGrid() ? null : citySegments();
+    cam.z = 1; cam.x = 0; cam.y = 0;
     hideCoach(false);
     buildTools();
     resize();
     updateHud();
-    radio(level.hint || openingCall());
+    radio(level.hint || openingCall(), true);
     maybeCoach();
   }
 
@@ -389,7 +417,7 @@
     const segs = map.edges.map(([a, b]) => [map.pos[a], map.pos[b]]);
     map.gates.forEach((g, i) => {
       const p = map.pos[g], d = map.exitDirs[i];
-      segs.push([p, [p[0] + d[0] * 1.3, p[1] + d[1] * 1.3]]);
+      segs.push([p, [p[0] + d[0] * RAMP, p[1] + d[1] * RAMP]]);
     });
     return segs;
   }
@@ -399,6 +427,7 @@
     const rect = $('board').getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
     L.dpr = dpr; L.W = Math.max(1, rect.width); L.H = Math.max(1, rect.height);
+    checkRadioClip();
     canvas.width = Math.round(L.W * dpr);
     canvas.height = Math.round(L.H * dpr);
     if (!map) return;
@@ -406,36 +435,65 @@
     if (isGrid()) {
       const side = [0, 0, 0, 0];
       level.exits.forEach((e) => { side[e[2]] = 1; });
-      x0 = -(EDGE + (side[3] ? 0.68 : 0.08)); x1 = map.grid.w - 1 + EDGE + (side[1] ? 0.68 : 0.08);
-      y0 = -(EDGE + (side[0] ? 0.58 : 0.08)); y1 = map.grid.h - 1 + EDGE + (side[2] ? 0.58 : 0.08);
+      const sx = 0.24 + SIGN_W / 2 + 0.02, sy = 0.24 + SIGN_H / 2 + 0.03; // sign extents past the edge
+      x0 = -(EDGE + (side[3] ? sx : 0.06)); x1 = map.grid.w - 1 + EDGE + (side[1] ? sx : 0.06);
+      y0 = -(EDGE + (side[0] ? sy : 0.06)); y1 = map.grid.h - 1 + EDGE + (side[2] ? sy : 0.06);
     } else {
       const b = cityBounds();
       [x0, y0, x1, y1] = b.view;
     }
-    L.s = Math.min(L.W / (x1 - x0), L.H / (y1 - y0), 92);
-    L.ox = (L.W - (x1 - x0) * L.s) / 2 - x0 * L.s;
-    L.oy = (L.H - (y1 - y0) * L.s) / 2 - y0 * L.s;
+    base.s = Math.min(L.W / (x1 - x0), L.H / (y1 - y0), 92);
+    base.ox = (L.W - (x1 - x0) * base.s) / 2 - x0 * base.s;
+    base.oy = (L.H - (y1 - y0) * base.s) / 2 - y0 * base.s;
+    base.view = [x0, y0, x1, y1];
+    updateView();
     staticLayer = isGrid() ? renderStaticGrid() : renderStaticCity();
+    staticDirty = false;
+  }
+
+  // Apply zoom and pan to the fitted view. The map can't be dragged off the board.
+  function updateView() {
+    cam.z = clamp(cam.z, 1, ZMAX);
+    L.s = base.s * cam.z;
+    const [x0, y0, x1, y1] = base.view;
+    const fitOx = L.W / 2 + (base.ox - L.W / 2) * cam.z, fitOy = L.H / 2 + (base.oy - L.H / 2) * cam.z;
+    const slackX = Math.max(0, ((x1 - x0) * L.s - L.W) / 2), slackY = Math.max(0, ((y1 - y0) * L.s - L.H) / 2);
+    cam.x = clamp(cam.x, -slackX, slackX);
+    cam.y = clamp(cam.y, -slackY, slackY);
+    L.ox = fitOx + cam.x;
+    L.oy = fitOy + cam.y;
+    staticDirty = true;
+    $('btn-fit').hidden = cam.z <= 1.01;
     if (coach) placeCoach();
   }
+  // Zoom to z1 keeping the map point under (mx, my) where it is.
+  function zoomAt(mx, my, z1) {
+    const ux = (mx - L.ox) / L.s, uy = (my - L.oy) / L.s;
+    cam.z = clamp(z1, 1, ZMAX);
+    const s1 = base.s * cam.z;
+    cam.x = mx - ux * s1 - (L.W / 2 + (base.ox - L.W / 2) * cam.z);
+    cam.y = my - uy * s1 - (L.H / 2 + (base.oy - L.H / 2) * cam.z);
+    updateView();
+  }
+  function resetZoom() { cam.z = 1; cam.x = 0; cam.y = 0; updateView(); }
 
   function cityBounds() {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const [x, y] of map.pos) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
-    const P = 0.5;
+    const P = GROUND_PAD;
     const ground = [x0 - P, y0 - P, x1 + P, y1 + P];
     const view = ground.slice();
     map.gates.forEach((g, i) => {
       const p = map.pos[g], d = map.exitDirs[i];
-      const c = [p[0] + d[0] * 0.95, p[1] + d[1] * 0.95];
-      view[0] = Math.min(view[0], c[0] - 0.4); view[2] = Math.max(view[2], c[0] + 0.4);
-      view[1] = Math.min(view[1], c[1] - 0.24); view[3] = Math.max(view[3], c[1] + 0.24);
+      const c = [p[0] + d[0] * SIGN_OUT, p[1] + d[1] * SIGN_OUT];
+      view[0] = Math.min(view[0], c[0] - SIGN_W / 2 - 0.03); view[2] = Math.max(view[2], c[0] + SIGN_W / 2 + 0.03);
+      view[1] = Math.min(view[1], c[1] - SIGN_H / 2 - 0.03); view[3] = Math.max(view[3], c[1] + SIGN_H / 2 + 0.03);
     });
     return { ground, view };
   }
 
   function drawSign(g, sx, sy, i) {
-    const s = L.s, sw = s * 0.72, sh = s * 0.38;
+    const s = L.s, sw = s * SIGN_W, sh = s * SIGN_H;
     g.fillStyle = COL['exit-green'];
     rr(g, sx - sw / 2, sy - sh / 2, sw, sh, s * 0.05); g.fill();
     g.strokeStyle = 'rgba(255,255,255,0.9)';
@@ -444,10 +502,10 @@
     g.fillStyle = '#ffffff';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.font = `700 ${Math.max(9, Math.round(s * 0.15))}px ${FONT_LABEL}`;
-    g.fillText('EXIT', sx, sy - sh * 0.17);
-    g.font = `600 ${Math.max(8, Math.round(s * 0.12))}px ${FONT_LABEL}`;
-    g.fillText(exitName(i).toUpperCase(), sx, sy + sh * 0.21);
+    g.font = `700 ${Math.max(9, Math.round(s * 0.14))}px ${FONT_LABEL}`;
+    g.fillText('EXIT', sx, sy - sh * 0.18);
+    g.font = `600 ${Math.max(8, Math.round(s * 0.115))}px ${FONT_LABEL}`;
+    g.fillText(exitName(i).toUpperCase(), sx, sy + sh * 0.22);
   }
 
   function drawBankGlyph(g, x, y, wd, ht) {
@@ -484,7 +542,7 @@
     level.exits.forEach(([x, y, d]) => {
       g.beginPath();
       g.moveTo(px(x), py(y));
-      g.lineTo(px(x + MG.DIRS[d][0] * (EDGE + 0.7)), py(y + MG.DIRS[d][1] * (EDGE + 0.7)));
+      g.lineTo(px(x + MG.DIRS[d][0] * (EDGE + 0.5)), py(y + MG.DIRS[d][1] * (EDGE + 0.5)));
       g.stroke();
     });
     g.fillStyle = COL.ground;
@@ -538,10 +596,9 @@
       g.fillRect(px(x) - ROAD * s, py(y) - ROAD * s, 2 * ROAD * s, 2 * ROAD * s);
     }
     laneDashes(g, map.edges.map(([a, b]) => [map.pos[a], map.pos[b]]).concat(
-      level.exits.map(([x, y, d]) => [[x, y], [x + MG.DIRS[d][0] * (EDGE + 0.7), y + MG.DIRS[d][1] * (EDGE + 0.7)]])));
+      level.exits.map(([x, y, d]) => [[x, y], [x + MG.DIRS[d][0] * (EDGE + 0.5), y + MG.DIRS[d][1] * (EDGE + 0.5)]])));
     level.exits.forEach(([x, y, d], i) => {
-      const vertical = d === 0 || d === 2;
-      const along = vertical ? EDGE + 0.36 : EDGE + 0.37;
+      const along = EDGE + 0.24; // sits on the ramp, just outside the city edge
       drawSign(g, px(x + MG.DIRS[d][0] * along), py(y + MG.DIRS[d][1] * along), i);
     });
     return off;
@@ -595,7 +652,7 @@
     g.lineWidth = 2 * ROAD * s;
     map.gates.forEach((gt, i) => {
       const p = map.pos[gt], d = map.exitDirs[i];
-      g.beginPath(); g.moveTo(px(p[0]), py(p[1])); g.lineTo(px(p[0] + d[0] * 1.3), py(p[1] + d[1] * 1.3)); g.stroke();
+      g.beginPath(); g.moveTo(px(p[0]), py(p[1])); g.lineTo(px(p[0] + d[0] * RAMP), py(p[1] + d[1] * RAMP)); g.stroke();
     });
 
     g.fillStyle = COL.ground;
@@ -674,7 +731,7 @@
 
     map.gates.forEach((gt, i) => {
       const p = map.pos[gt], d = map.exitDirs[i];
-      drawSign(g, px(p[0] + d[0] * 0.95), py(p[1] + d[1] * 0.95), i);
+      drawSign(g, px(p[0] + d[0] * SIGN_OUT), py(p[1] + d[1] * SIGN_OUT), i);
     });
     return off;
   }
@@ -735,7 +792,7 @@
   }
 
   function drawRoadblock(gx, gy, scale, alpha, t) {
-    const s = L.s * scale, bw = s * 0.58, bh = s * 0.2;
+    const s = L.s * scale, bw = s * 0.63, bh = s * 0.22;
     ctx.save();
     ctx.translate(px(gx), py(gy));
     ctx.globalAlpha = alpha;
@@ -764,7 +821,7 @@
   }
 
   function drawSpikes(gx, gy, scale, alpha) {
-    const s = L.s * scale, w = s * 0.56, h = s * 0.1;
+    const s = L.s * scale, w = s * 0.6, h = s * 0.11;
     ctx.save();
     ctx.translate(px(gx), py(gy));
     ctx.rotate(-0.5);
@@ -812,7 +869,7 @@
   }
 
   function drawCar(gx, gy, angle, kind, t, alpha, label) {
-    const s = L.s, len = s * 0.48, wid = s * 0.28;
+    const s = L.s, len = s * 0.54, wid = s * 0.31;
     const x = px(gx), y = py(gy);
     ctx.save();
     ctx.globalAlpha = alpha == null ? 1 : alpha;
@@ -1069,6 +1126,7 @@
   }
 
   function frame() {
+    if (staticDirty && map) { staticLayer = isGrid() ? renderStaticGrid() : renderStaticCity(); staticDirty = false; }
     draw(now());
     requestAnimationFrame(frame);
   }
@@ -1283,6 +1341,7 @@
       id === 16 && !fresh && !state.reveal && state.stock.heli > 0 && { key: 'c16-heli', text: 'Free: the chopper shows their whole plan.', at: () => elScreen('tool-heli'), tool: 'heli' },
       $('tool-spike') && { key: 'spike', text: 'New: spike strips. Select, then tap a corner.', at: () => elScreen('tool-spike'), tool: 'spike' },
       $('tool-traffic') && { key: 'traffic', text: 'New: traffic control. Select, then tap a street.', at: () => elScreen('tool-traffic'), tool: 'traffic' },
+      !isGrid() && fresh && { key: 'zoom', text: 'Tip: pinch the map to zoom in.', at: () => { const r = canvas.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; } },
       (id >= 5 || mode === 'daily') && state.stock.block === 0 && boost.block < META.MAX_BACKUP &&
         { key: 'backup', text: 'Out of roadblocks? Tap here to call backup.', at: () => elScreen('tool-block'), tool: 'block' },
     ];
@@ -1342,17 +1401,64 @@
 
   document.addEventListener('pointerdown', () => AUDIO.unlock(), true);
   document.addEventListener('keydown', () => AUDIO.unlock(), true);
+  // ---------- map gestures: tap (on release), drag to pan when zoomed, pinch or wheel to zoom ----------
+  const touches = new Map(); // pointerId -> [x, y]
+  let gesture = null;        // { kind: 'tap' | 'pan' | 'drag' | 'pinch' | 'done', ... }
+  const localPt = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  const midDist = () => {
+    const [a, b] = [...touches.values()];
+    return { mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1 };
+  };
   canvas.addEventListener('pointerdown', (e) => {
     if (!map) return;
-    const r = canvas.getBoundingClientRect();
-    handleTap(e.clientX - r.left, e.clientY - r.top);
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    const p = localPt(e);
+    touches.set(e.pointerId, p);
+    if (touches.size === 1) gesture = { kind: 'tap', start: p, cx: cam.x, cy: cam.y };
+    else if (touches.size === 2) {
+      const m = midDist();
+      gesture = { kind: 'pinch', d0: m.d, z0: cam.z, last: m.mid };
+      if (coach && coach.key === 'zoom') hideCoach(true);
+    }
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (!map || e.pointerType !== 'mouse') { hoverPt = null; return; }
-    const r = canvas.getBoundingClientRect();
-    hoverPt = [e.clientX - r.left, e.clientY - r.top];
+    if (!map) return;
+    const p = localPt(e);
+    if (e.pointerType === 'mouse' && !touches.size) { hoverPt = p; return; }
+    hoverPt = null;
+    if (!touches.has(e.pointerId) || !gesture) return;
+    touches.set(e.pointerId, p);
+    if (gesture.kind === 'pinch' && touches.size >= 2) {
+      const m = midDist();
+      cam.x += m.mid[0] - gesture.last[0];
+      cam.y += m.mid[1] - gesture.last[1];
+      updateView();
+      zoomAt(m.mid[0], m.mid[1], gesture.z0 * m.d / gesture.d0);
+      gesture.last = m.mid;
+    } else if (gesture.kind === 'tap' || gesture.kind === 'pan') {
+      const dx = p[0] - gesture.start[0], dy = p[1] - gesture.start[1];
+      const zoomed = cam.z > 1.01;
+      if (gesture.kind === 'tap' && Math.hypot(dx, dy) > (zoomed ? 10 : 24)) gesture.kind = zoomed ? 'pan' : 'drag';
+      if (gesture.kind === 'pan') { cam.x = gesture.cx + dx; cam.y = gesture.cy + dy; updateView(); }
+    }
   });
+  function endTouch(e, cancelled) {
+    if (!touches.has(e.pointerId)) return;
+    touches.delete(e.pointerId);
+    if (gesture && gesture.kind === 'tap' && !cancelled && touches.size === 0) handleTap(gesture.start[0], gesture.start[1]);
+    if (touches.size === 0) gesture = null;
+    else if (gesture && gesture.kind === 'pinch') gesture = { kind: 'done' }; // wait until every finger is up
+  }
+  canvas.addEventListener('pointerup', (e) => endTouch(e, false));
+  canvas.addEventListener('pointercancel', (e) => endTouch(e, true));
   canvas.addEventListener('pointerleave', () => { hoverPt = null; });
+  canvas.addEventListener('wheel', (e) => {
+    if (!map) return;
+    e.preventDefault();
+    const p = localPt(e);
+    zoomAt(p[0], p[1], cam.z * Math.exp(-e.deltaY * 0.0015));
+  }, { passive: false });
+  $('btn-fit').addEventListener('click', () => { resetZoom(); sfx('tap'); });
 
   // ---------- screens ----------
   let result = null; // what the open result screen paid out: { coins, doubled, rank, watched }
